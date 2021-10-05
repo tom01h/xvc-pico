@@ -68,26 +68,37 @@ static int gpio_read(void)
 // Handler for "gpio_xfer" on the host side
 static void cmd_xfer(const uint8_t *commands, uint8_t* tx_buffer)
 {
-  uint32_t tdo = 0;
   int header_offset = 0;
   // Replace these with memcpy
   uint32_t n = (commands[4] << 24) | (commands[3] << 16) | (commands[2] << 8) | (commands[1] << 0);
-  uint32_t tms = (commands[8] << 24) | (commands[7] << 16) | (commands[6] << 8) | (commands[5] << 0);
-  uint32_t tdi = (commands[12] << 24) | (commands[11] << 16) | (commands[10] << 8) | (commands[9] << 0);
-  int bytes = (n + 7) / 8;
+  int bytes = (n + 7) / 8; // 16
 
-  for (uint32_t i = 0; i < n; i++) {
-    gpio_write(0, tms & 1, tdi & 1);
-    tdo |= gpio_read() << i;
-    gpio_write(1, tms & 1, tdi & 1);
-    tms >>= 1;
-    tdi >>= 1;
+  for (uint32_t j = 0; j < (bytes+3)/4; j++) {
+    uint32_t tdo = 0;
+    uint32_t tms = (commands[j*8+8] << 24) | (commands[j*8+7] << 16) | (commands[j*8+6] << 8) | (commands[j*8+5] << 0);
+    uint32_t tdi = (commands[j*8+12] << 24) | (commands[j*8+11] << 16) | (commands[j*8+10] << 8) | (commands[j*8+9] << 0);
+    if(((j + 1) != (bytes+3)/4) | (n%32) == 0){
+      for (uint32_t i = 0; i < 32; i++) {
+        gpio_write(0, tms & 1, tdi & 1);
+        tdo |= gpio_read() << i;
+        gpio_write(1, tms & 1, tdi & 1);
+        tms >>= 1;
+        tdi >>= 1;
+      }
+    } else {
+      for (uint32_t i = 0; i < (n%32); i++) {
+        gpio_write(0, tms & 1, tdi & 1);
+        tdo |= gpio_read() << i;
+        gpio_write(1, tms & 1, tdi & 1);
+        tms >>= 1;
+        tdi >>= 1;
+      }
+    }
+    tx_buffer[header_offset++] = (tdo >> 0) & 0xFF;  // uint32_t to bytes
+    tx_buffer[header_offset++] = (tdo >> 8) & 0xFF;
+    tx_buffer[header_offset++] = (tdo >> 16) & 0xFF;
+    tx_buffer[header_offset++] = (tdo >> 24) & 0xFF;
   }
-
-  tx_buffer[header_offset++] = (tdo >> 0) & 0xFF;  // uint32_t to bytes
-  tx_buffer[header_offset++] = (tdo >> 8) & 0xFF;
-  tx_buffer[header_offset++] = (tdo >> 16) & 0xFF;
-  tx_buffer[header_offset++] = (tdo >> 24) & 0xFF;
 
   /* Send the transfer response back to host */
   tud_vendor_write(tx_buffer, bytes);
