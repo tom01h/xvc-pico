@@ -66,19 +66,36 @@ static int gpio_read(void)
 }
 
 // Handler for "gpio_xfer" on the host side
-static void cmd_xfer(const uint8_t *commands, uint8_t* tx_buffer)
+static int cmd_xfer(int bitsLeft, const uint8_t *commands, uint8_t* tx_buffer)
 {
   int header_offset = 0;
-  // Replace these with memcpy
-  uint32_t n = (commands[4] << 24) | (commands[3] << 16) | (commands[2] << 8) | (commands[1] << 0);
-  int bytes = (n + 7) / 8; // 16
+  uint32_t n;
+  int com_offset = 0;
 
-  for (uint32_t j = 0; j < (bytes+3)/4; j++) {
-    uint32_t tdo = 0;
-    uint32_t tms = (commands[j*8+8] << 24) | (commands[j*8+7] << 16) | (commands[j*8+6] << 8) | (commands[j*8+5] << 0);
-    uint32_t tdi = (commands[j*8+12] << 24) | (commands[j*8+11] << 16) | (commands[j*8+10] << 8) | (commands[j*8+9] << 0);
-    if(((j + 1) != (bytes+3)/4) | (n%32) == 0){
-      for (uint32_t i = 0; i < 32; i++) {
+  if(bitsLeft == 0){
+    com_offset = 5;
+    bitsLeft = (commands[4] << 24) | (commands[3] << 16) | (commands[2] << 8) | (commands[1] << 0);
+    if(bitsLeft >= 16*8){
+      n = 16*8;
+    } else {
+      n = bitsLeft;
+    }
+  } else {
+    if(bitsLeft >= 32*8){
+      n = 32*8;
+    } else {
+      n = bitsLeft;
+    }
+  }
+  
+  int bytes = (n + 7) / 8; // 16 or 32
+
+  for (uint32_t j = 0; j < bytes; j++) {
+    uint8_t tdo = 0;
+    uint8_t tms = commands[j*2+com_offset];
+    uint8_t tdi = commands[j*2+com_offset+1];
+    if(((j + 1) != bytes) | (n%8) == 0){
+      for (uint32_t i = 0; i < 8; i++) {
         gpio_write(0, tms & 1, tdi & 1);
         tdo |= gpio_read() << i;
         gpio_write(1, tms & 1, tdi & 1);
@@ -86,7 +103,7 @@ static void cmd_xfer(const uint8_t *commands, uint8_t* tx_buffer)
         tdi >>= 1;
       }
     } else {
-      for (uint32_t i = 0; i < (n%32); i++) {
+      for (uint32_t i = 0; i < (n%8); i++) {
         gpio_write(0, tms & 1, tdi & 1);
         tdo |= gpio_read() << i;
         gpio_write(1, tms & 1, tdi & 1);
@@ -94,10 +111,7 @@ static void cmd_xfer(const uint8_t *commands, uint8_t* tx_buffer)
         tdi >>= 1;
       }
     }
-    tx_buffer[header_offset++] = (tdo >> 0) & 0xFF;  // uint32_t to bytes
-    tx_buffer[header_offset++] = (tdo >> 8) & 0xFF;
-    tx_buffer[header_offset++] = (tdo >> 16) & 0xFF;
-    tx_buffer[header_offset++] = (tdo >> 24) & 0xFF;
+    tx_buffer[header_offset++] = tdo;
   }
 
   /* Send the transfer response back to host */
@@ -105,6 +119,8 @@ static void cmd_xfer(const uint8_t *commands, uint8_t* tx_buffer)
 
   // debug code
   // led_on();
+
+  return bitsLeft - n;
 }
 
 // Handler for "gpio_write" on the host side
@@ -121,11 +137,17 @@ static void cmd_write(const uint8_t *commands)
 void cmd_handle(uint8_t *rx_buf, __attribute__((unused)) uint32_t count, uint8_t *tx_buf)
 {
   uint8_t *commands = (uint8_t*)rx_buf;
+  static int bitsLeft;
+
+  if(bitsLeft != 0){
+    bitsLeft = cmd_xfer(bitsLeft, commands, tx_buf);
+    return;
+  }
 
   while (*commands != CMD_STOP) {
     switch ((*commands) & 0x0F) {
       case CMD_XFER:
-        cmd_xfer(commands, tx_buf);
+        bitsLeft = cmd_xfer(bitsLeft, commands, tx_buf);
         return;
         break;
 

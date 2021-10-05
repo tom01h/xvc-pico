@@ -19,7 +19,7 @@ typedef struct buffer_info
   cmd_buffer buffer;
 } buffer_info;
 
-#define n_buffers (64)
+#define n_buffers (1)
 
 buffer_info buffer_infos[n_buffers];
 
@@ -76,7 +76,6 @@ void jtag_task()
 #ifdef MULTICORE
 void core1_entry() {
 
-  djtag_init();
   while (1)
   {
     uint rx_num = multicore_fifo_pop_blocking();

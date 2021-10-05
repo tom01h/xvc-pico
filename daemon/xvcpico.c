@@ -64,32 +64,27 @@ enum dirtyJtagCmd {
   };
 */
 
-void gpio_xfer(uint32_t n, uint32_t *tms, uint32_t *tdi, uint32_t *tdo)
+void gpio_xfer(_Bool header, uint32_t len, uint32_t n, uint8_t *tms, uint8_t *tdi, uint8_t *tdo)
 {
   unsigned char tx_buffer[64];
   unsigned char result[64];
   int actual_length, ret, header_offset = 0;
   //uint32_t tdo[0] = 0;
 
-  int bytes = (n + 7) / 8; // 16
+  int bytes = (n + 7) / 8; // 16 or 32
 
-  // Replace these with memcpy
-  tx_buffer[header_offset++] = CMD_XFER;
-  tx_buffer[header_offset++] = (n >> 0) & 0xFF;  // uint32_t to bytes
-  tx_buffer[header_offset++] = (n >> 8) & 0xFF;
-  tx_buffer[header_offset++] = (n >> 16) & 0xFF;
-  tx_buffer[header_offset++] = (n >> 24) & 0xFF;
-
-  for(int i = 0; i < (bytes+3) / 4; i++){
-    tx_buffer[header_offset++] = (tms[i] >> 0) & 0xFF;  // uint32_t to bytes
-    tx_buffer[header_offset++] = (tms[i] >> 8) & 0xFF;
-    tx_buffer[header_offset++] = (tms[i] >> 16) & 0xFF;
-    tx_buffer[header_offset++] = (tms[i] >> 24) & 0xFF;
-
-    tx_buffer[header_offset++] = (tdi[i] >> 0) & 0xFF;  // uint32_t to bytes
-    tx_buffer[header_offset++] = (tdi[i] >> 8) & 0xFF;
-    tx_buffer[header_offset++] = (tdi[i] >> 16) & 0xFF;
-    tx_buffer[header_offset++] = (tdi[i] >> 24) & 0xFF;
+  if(header){
+    // Replace these with memcpy
+    tx_buffer[header_offset++] = CMD_XFER;
+    tx_buffer[header_offset++] = (len >> 0) & 0xFF;  // uint32_t to bytes
+    tx_buffer[header_offset++] = (len >> 8) & 0xFF;
+    tx_buffer[header_offset++] = (len >> 16) & 0xFF;
+    tx_buffer[header_offset++] = (len >> 24) & 0xFF;
+  }
+  
+  for(int i = 0; i < bytes; i++){
+    tx_buffer[header_offset++] = tms[i];
+    tx_buffer[header_offset++] = tdi[i];
   }
   
   actual_length = 0;
@@ -110,8 +105,8 @@ void gpio_xfer(uint32_t n, uint32_t *tms, uint32_t *tdi, uint32_t *tdo)
     }
   } while (actual_length == 0);
 
-  for(int i = 0; i < (bytes+3) / 4; i++){
-    tdo[i] = (result[i*4+3] << 24) | (result[i*4+2] << 16) | (result[i*4+1] << 8) | (result[i*4+0] << 0);
+  for(int i = 0; i < bytes; i++){
+    tdo[i] = result[i];
   }
   return;
 }
@@ -277,44 +272,36 @@ int handle_data(int fd) {
     int bytesLeft = nr_bytes;
     int bitsLeft = len;
     int byteIndex = 0;
-    uint32_t tdi[16/4], tms[16/4], tdo[16/4];
+    uint8_t tdi[32], tms[32], tdo[32];
+    _Bool header;
+    int size;
+
+    header = 1;
 
     while (bytesLeft > 0) {
       tms[0] = 0;
       tdi[0] = 0;
-      tdo[0] = 0;tdo[1] = 0;tdo[2] = 0;tdo[3] = 0;
-      if (bytesLeft >= 16) {  // We can (should) process bigger chunks here
-        memcpy(tms, &buffer[byteIndex], 16);
-        memcpy(tdi, &buffer[byteIndex + nr_bytes], 16);
-        gpio_xfer(16*8, tms, tdi, tdo);
-        memcpy(&result[byteIndex], tdo, 16);
-        bytesLeft -= 16;
-        bitsLeft -= 16*8;
-        byteIndex += 16;
-        if (verbose) {
-          printf("LEN : 0x%08x\n", 16*8);
-          printf("TMS : 0x%08x\n", tms[0]);
-          printf("TDI : 0x%08x\n", tdi[0]);
-          printf("TDO : 0x%08x\n", tdo[0]);
-          printf("TDO : 0x%08x\n", tdo[1]);
-          printf("TDO : 0x%08x\n", tdo[2]);
-          printf("TDO : 0x%08x\n", tdo[3]);
-        }
+      tdo[0] = 0;
+      if (header){
+        size = 16;
+      } else {
+        size = 32;
+      }
+      if (bytesLeft >= size) {
+        memcpy(tms, &buffer[byteIndex], size);
+        memcpy(tdi, &buffer[byteIndex + nr_bytes], size);
+        gpio_xfer(header, len, size*8, tms, tdi, tdo);
+        memcpy(&result[byteIndex], tdo, size);
+        bytesLeft -= size;
+        bitsLeft -= size*8;
+        byteIndex += size;
+        header = 0;
       } else {
         memcpy(tms, &buffer[byteIndex], bytesLeft);
         memcpy(tdi, &buffer[byteIndex + nr_bytes], bytesLeft);
-        gpio_xfer(bitsLeft, tms, tdi, tdo);
+        gpio_xfer(header, len, bitsLeft, tms, tdi, tdo);
         memcpy(&result[byteIndex], tdo, bytesLeft);
         bytesLeft = 0;
-        if (verbose) {
-          printf("LEN : 0x%08x\n", bitsLeft);
-          printf("TMS : 0x%08x\n", tms[0]);
-          printf("TDI : 0x%08x\n", tdi[0]);
-          printf("TDO : 0x%08x\n", tdo[0]);
-          printf("TDO : 0x%08x\n", tdo[1]);
-          printf("TDO : 0x%08x\n", tdo[2]);
-          printf("TDO : 0x%08x\n", tdo[3]);
-        }
         break;
       }
     }
