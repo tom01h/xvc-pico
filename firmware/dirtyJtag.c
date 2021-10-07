@@ -7,7 +7,7 @@
 #include "cmd.h"
 #include "get_serial.h"
 
-#define MULTICORE
+// #define MULTICORE
 
 typedef uint8_t cmd_buffer[64];
 static uint wr_buffer_number = 0;

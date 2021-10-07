@@ -64,12 +64,10 @@ enum dirtyJtagCmd {
   };
 */
 
-void gpio_xfer(_Bool header, uint32_t len, uint32_t n, uint8_t *tms, uint8_t *tdi, uint8_t *tdo)
+void gpio_send(_Bool header, uint32_t len, uint32_t n, uint8_t *tms, uint8_t *tdi)
 {
   unsigned char tx_buffer[64];
-  unsigned char result[64];
   int actual_length, ret, header_offset = 0;
-  //uint32_t tdo[0] = 0;
 
   int bytes = (n + 7) / 8; // 16 or 32
 
@@ -93,6 +91,14 @@ void gpio_xfer(_Bool header, uint32_t len, uint32_t n, uint8_t *tms, uint8_t *td
     printf("gpio_xfer_full: usb bulk write failed!\n");
     return;
   }
+}
+
+void gpio_recieve(uint32_t n, uint8_t *tdo)
+{
+  unsigned char result[64];
+  int actual_length, ret;
+
+  int bytes = (n + 7) / 8; // 16 or 32
 
   do {
     // Note: For a full-speed device, a bulk packet is limited to 64 bytes!
@@ -272,9 +278,11 @@ int handle_data(int fd) {
     int bytesLeft = nr_bytes;
     int bitsLeft = len;
     int byteIndex = 0;
+    int byteIndexr = 0;
     uint8_t tdi[32], tms[32], tdo[32];
     _Bool header;
     int size;
+    int sizer =0;
 
     header = 1;
 
@@ -290,8 +298,13 @@ int handle_data(int fd) {
       if (bytesLeft >= size) {
         memcpy(tms, &buffer[byteIndex], size);
         memcpy(tdi, &buffer[byteIndex + nr_bytes], size);
-        gpio_xfer(header, len, size*8, tms, tdi, tdo);
-        memcpy(&result[byteIndex], tdo, size);
+        gpio_send(header, len, size*8, tms, tdi);
+        if(!header){
+          gpio_recieve(sizer*8, tdo);
+          memcpy(&result[byteIndexr], tdo, sizer);
+        }
+        sizer = size;
+        byteIndexr = byteIndex;
         bytesLeft -= size;
         bitsLeft -= size*8;
         byteIndex += size;
@@ -299,11 +312,20 @@ int handle_data(int fd) {
       } else {
         memcpy(tms, &buffer[byteIndex], bytesLeft);
         memcpy(tdi, &buffer[byteIndex + nr_bytes], bytesLeft);
-        gpio_xfer(header, len, bitsLeft, tms, tdi, tdo);
+        gpio_send(header, len, bitsLeft, tms, tdi);
+        if(!header){
+          gpio_recieve(sizer*8, tdo);
+          memcpy(&result[byteIndexr], tdo, sizer);
+        }
+        gpio_recieve(bitsLeft, tdo);
         memcpy(&result[byteIndex], tdo, bytesLeft);
-        bytesLeft = 0;
         break;
       }
+    }
+
+    if(bytesLeft == 0){
+      gpio_recieve(sizer*8, tdo);
+      memcpy(&result[byteIndexr], tdo, sizer);
     }
 
     gpio_write(0, 1, 0);
