@@ -7,7 +7,7 @@
 #include "cmd.h"
 #include "get_serial.h"
 
-// #define MULTICORE
+#define MULTICORE
 
 typedef uint8_t cmd_buffer[64];
 static uint wr_buffer_number = 0;
@@ -19,7 +19,7 @@ typedef struct buffer_info
   cmd_buffer buffer;
 } buffer_info;
 
-#define n_buffers (1)
+#define n_buffers (4)
 
 buffer_info buffer_infos[n_buffers];
 
