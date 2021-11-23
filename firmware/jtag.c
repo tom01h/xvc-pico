@@ -31,7 +31,7 @@
 #include <hardware/gpio.h>
 
 #include "tusb.h"
-#include "cmd.h"
+#include "jtag.h"
 
 // Modified
 enum CommandIdentifier {
@@ -39,16 +39,6 @@ enum CommandIdentifier {
   CMD_XFER = 0x03,
   CMD_WRITE = 0x04,
 };
-
-static void led_on()
-{
-  gpio_put(LED_PIN, 1);
-}
-
-static void led_off()
-{
-  gpio_put(LED_PIN, 0);
-}
 
 static inline void gpio_write(int tck, int tms, int tdi)
 {

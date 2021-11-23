@@ -4,10 +4,8 @@
 #include "pico/multicore.h"
 #include "bsp/board.h"
 #include "tusb.h"
-#include "cmd.h"
+#include "jtag.h"
 #include "get_serial.h"
-
-// #define MULTICORE
 
 typedef uint8_t cmd_buffer[64];
 static uint wr_buffer_number = 0;
@@ -27,16 +25,6 @@ static cmd_buffer tx_buf;
 
 void jtag_main_task()
 {
-#ifdef MULTICORE
-  if (multicore_fifo_rvalid())
-  {
-    //some command processing has been done
-    uint rx_num = multicore_fifo_pop_blocking();
-    buffer_info* bi = &buffer_infos[rx_num];
-    bi->busy = false;
-
-  }
-#endif
   if ((buffer_infos[wr_buffer_number].busy == false))
   {
     //If tud_task() is called and tud_vendor_read isn't called immediately (i.e before calling tud_task again)
@@ -56,9 +44,6 @@ void jtag_main_task()
         {
           wr_buffer_number = 0;
         }
-#ifdef MULTICORE
-        multicore_fifo_push_blocking(bnum);
-#endif
       }
     }
 
@@ -66,31 +51,8 @@ void jtag_main_task()
 
 }
 
-void jtag_task()
-{
-#ifndef MULTICORE
-  jtag_main_task();
-#endif
-}
-
-#ifdef MULTICORE
-void core1_entry() {
-
-  while (1)
-  {
-    uint rx_num = multicore_fifo_pop_blocking();
-    buffer_info* bi = &buffer_infos[rx_num];
-    assert (bi->busy);
-    cmd_handle(bi->buffer, bi->count, tx_buf);
-    multicore_fifo_push_blocking(rx_num);
-  }
-
-}
-#endif
-
 void fetch_command()
 {
-#ifndef MULTICORE
   if (buffer_infos[rd_buffer_number].busy)
   {
     cmd_handle(buffer_infos[rd_buffer_number].buffer, buffer_infos[rd_buffer_number].count, tx_buf);
@@ -101,7 +63,6 @@ void fetch_command()
       rd_buffer_number = 0;
     }
   }
-#endif
 }
 
 //this is to work around the fact that tinyUSB does not handle setup request automatically
@@ -136,11 +97,8 @@ int main()
   gpio_init(LED_PIN);
   gpio_set_dir(LED_PIN, GPIO_OUT);
 
-#ifdef MULTICORE
-  multicore_launch_core1(core1_entry);
-#endif
   while (1) {
     jtag_main_task();
-    fetch_command();//for unicore implementation
+    fetch_command();
   }
 }
