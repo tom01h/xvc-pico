@@ -108,7 +108,7 @@ static int __time_critical_func(cmd_xfer)(int bitsLeft, const uint8_t *commands,
   }
 
   /* Send the transfer response back to host */
-  tud_vendor_write(tx_buffer, bytes);
+  tud_vendor_n_write(JTAG_ITF, tx_buffer, bytes);
 
   // debug code
   // led_on();

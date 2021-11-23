@@ -5,7 +5,6 @@
 #include "bsp/board.h"
 #include "tusb.h"
 #include "jtag.h"
-#include "get_serial.h"
 
 typedef uint8_t cmd_buffer[64];
 static uint wr_buffer_number = 0;
@@ -31,10 +30,10 @@ void jtag_main_task()
     //after there is data available, there is a risk that data from 2 BULK OUT transaction will be (partially) combined into one
     //The DJTAG protocol does not tolerate this.
     tud_task();// tinyusb device task
-    if (tud_vendor_available())
+    if (tud_vendor_n_available(JTAG_ITF))
     {
       uint bnum = wr_buffer_number;
-      uint count = tud_vendor_read(buffer_infos[wr_buffer_number].buffer, 64);
+      uint count = tud_vendor_n_read(JTAG_ITF, buffer_infos[wr_buffer_number].buffer, 64);
       if (count != 0)
       {
         buffer_infos[bnum].count = count;
@@ -76,7 +75,6 @@ bool tud_vendor_control_xfer_cb(__attribute__((unused)) uint8_t rhport, uint8_t 
 int main()
 {
   board_init();
-  usb_serial_init();
   tusb_init();
 
   // GPIO init

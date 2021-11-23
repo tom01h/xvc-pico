@@ -30,9 +30,9 @@
 #include <libusb.h>
 #define DIRTYJTAG_VID       0x1209
 #define DIRTYJTAG_PID       0xC0CA
-#define DIRTYJTAG_INTF      0
-#define DIRTYJTAG_READ_EP   0x82
-#define DIRTYJTAG_WRITE_EP  0x01
+#define DIRTYJTAG_INTF      3
+#define DIRTYJTAG_READ_EP   0x86
+#define DIRTYJTAG_WRITE_EP  0x05
 libusb_context *usb_ctx;
 libusb_device_handle *dev_handle;
 

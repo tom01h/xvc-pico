@@ -24,7 +24,6 @@ pico_sdk_init()
 add_executable(xvcPico
 		xvcPico.c
 		usb_descriptors.c
-		get_serial.c
 		jtag.c
 )
 
@@ -41,8 +40,6 @@ target_link_libraries(xvcPico PRIVATE pico_stdlib)
 
 # Add any user requested libraries
 target_link_libraries(xvcPico PRIVATE
-    hardware_pio
-	hardware_dma
 	pico_unique_id
 	tinyusb_device
 	tinyusb_board
