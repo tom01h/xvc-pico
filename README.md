@@ -41,7 +41,8 @@ mkdir ~/repos
 cd ~/repos
 
 git clone https://github.com/raspberrypi/pico-sdk.git
-git clone https://github.com/kholia/xvc-pico.git
+# git clone https://github.com/kholia/xvc-pico.git
+git clone https://github.com/tom01h/xvc-pico
 ```
 
 Build the host-side daemon:
@@ -63,7 +64,7 @@ cmake .
 make -j4
 ```
 
-Upload `dirtyJtag.uf2` file to the Raspberry Pico Board.
+Upload `xvcPico.uf2` file to the Raspberry Pico Board.
 
 
 ### Usage
@@ -110,3 +111,60 @@ JTAG programmers. I use this project as my "daily driver" now ;)
 - https://github.com/kholia/Colorlight-5A-75B
 - https://github.com/fusesoc/blinky#ebaz4205-development-board
 - https://github.com/maxnet/pico-webserver/ approach (LWIP_SOCKET is not available yet!)
+
+
+
+## おまけ
+
+### USB UART
+
+pico の↓のハードウエア UART ピンを FPGA の UART とつなぐ。
+
+```
+#define UART_TX_PIN 0
+#define UART_RX_PIN 1
+```
+
+FPGA の UART は 115200bps に設定する。
+
+pico の USB をつなぐと /dev/ttyACMn が生えてくる。
+
+### PC から FPGA の AXIバスマスタをコントロールする。
+
+FPGA には↓のファイルをインスタンスする。
+
+```
+fpga/busIf.sv  fpga/pmodCmd.sv  fpga/pmodIf.v
+```
+
+pmodIf の端子と pico の↓をつなぐ。
+
+```
+#define PCK_PIN 6
+#define PWRITE_PIN 7
+#define PWD0_PIN 8
+#define PWD1_PIN 9
+#define PRD0_PIN 10
+#define PRD1_PIN 11
+#define PWAIT_PIN 4
+```
+
+`host/main.c` を参考に、書き込みは `send_data.data` にデータを書いて `write_dev(SIZE, waddress, send_data);`。
+
+読み出しは `read_dev(SIZE, raddress, receive_data);` を実行すると `receive_data` に読み出しデータが書き込まれる。
+
+シングル転送時には、SIZE には 1,2,4 バイト時は 1,2,4 を、8バイト時は 6 を設定する。
+
+バースト転送は 8バイト×128バーストまで対応。(バースト長-1)×8 を SIZE に設定する。バースト転送は ４KB 境界をまたいではいけない。
+
+最大バースト時に書き込み、読み出しともに 5Mbps 弱の速度で動く。
+
+### サンプル
+
+`host/main.c` は pmodIf に AXI UART Lite と BRAM Ctrl を繋いだ回路を動くすサンプルです。 
+
+BRAM に 1KB のデータを読み書きする時間を計測して、UART に出力します。
+
+アドレスは以下のように設定。
+
+![](sample.png)

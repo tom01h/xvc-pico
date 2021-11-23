@@ -4,27 +4,46 @@
 #include "pico/multicore.h"
 #include "bsp/board.h"
 #include "tusb.h"
+#include "xvcPico.h"
 #include "jtag.h"
+#include "axm.h"
 
-typedef uint8_t cmd_buffer[64];
-static uint wr_buffer_number = 0;
-static uint rd_buffer_number = 0;
-typedef struct buffer_info
+void __time_critical_func(core1_entry)()
 {
-  volatile uint8_t count;
-  volatile uint8_t busy;
-  cmd_buffer buffer;
-} buffer_info;
+  while (1)
+  {
+    if(tud_cdc_n_available(0)){
+      char buf[64];
+      uint32_t count = tud_cdc_n_read(0, buf, sizeof(buf));
+      tud_cdc_n_read_flush(0);
+      for(int i = 0; i < count; i++){
+        uart_putc(UART_ID, buf[i]);
+      }
+    }
 
-#define n_buffers (4)
+    int i = 0;
+    char str[56];
+    while(uart_is_readable(UART_ID)){
+      str[i] = uart_getc(UART_ID);
+      i++;
+    }
+    str[i] = 0;
+    if(i != 0){
+      tud_cdc_n_write_str(0, str);
+      tud_cdc_n_write_flush(0);
+    }
+  }
 
-buffer_info buffer_infos[n_buffers];
+}
+
+buffer_info buffer_info_jtag;
+buffer_info buffer_info_axm;
 
 static cmd_buffer tx_buf;
 
-void jtag_main_task()
+void __time_critical_func(from_host_task)()
 {
-  if ((buffer_infos[wr_buffer_number].busy == false))
+  if ((buffer_info_jtag.busy == false))
   {
     //If tud_task() is called and tud_vendor_read isn't called immediately (i.e before calling tud_task again)
     //after there is data available, there is a risk that data from 2 BULK OUT transaction will be (partially) combined into one
@@ -32,35 +51,38 @@ void jtag_main_task()
     tud_task();// tinyusb device task
     if (tud_vendor_n_available(JTAG_ITF))
     {
-      uint bnum = wr_buffer_number;
-      uint count = tud_vendor_n_read(JTAG_ITF, buffer_infos[wr_buffer_number].buffer, 64);
+      uint count = tud_vendor_n_read(JTAG_ITF, buffer_info_jtag.buffer, 64);
       if (count != 0)
       {
-        buffer_infos[bnum].count = count;
-        buffer_infos[bnum].busy = true;
-        wr_buffer_number = wr_buffer_number + 1; //switch buffer
-        if (wr_buffer_number == n_buffers)
-        {
-          wr_buffer_number = 0;
-        }
+        buffer_info_jtag.count = count;
+        buffer_info_jtag.busy = true;
       }
     }
 
   }
 
+  if ((buffer_info_axm.busy == false))
+  {
+    tud_task();
+    if (tud_vendor_n_available(AXM_ITF))
+    {
+      uint count = tud_vendor_n_read(AXM_ITF, buffer_info_axm.buffer, 64);
+      if (count != 0)
+      {
+        buffer_info_axm.count = count;
+        buffer_info_axm.busy = true;
+      }
+    }
+
+  }
 }
 
 void fetch_command()
 {
-  if (buffer_infos[rd_buffer_number].busy)
+  if (buffer_info_jtag.busy)
   {
-    cmd_handle(buffer_infos[rd_buffer_number].buffer, buffer_infos[rd_buffer_number].count, tx_buf);
-    buffer_infos[rd_buffer_number].busy = false;
-    rd_buffer_number++; //switch buffer
-    if (rd_buffer_number == n_buffers)
-    {
-      rd_buffer_number = 0;
-    }
+    cmd_handle(buffer_info_jtag.buffer, buffer_info_jtag.count, tx_buf);
+    buffer_info_jtag.busy = false;
   }
 }
 
@@ -77,7 +99,7 @@ int main()
   board_init();
   tusb_init();
 
-  // GPIO init
+  // JTAG init
   gpio_init(tdi_gpio);
   gpio_init(tdo_gpio);
   gpio_init(tck_gpio);
@@ -86,17 +108,44 @@ int main()
   gpio_set_dir(tdo_gpio, GPIO_IN);
   gpio_set_dir(tck_gpio, GPIO_OUT);
   gpio_set_dir(tms_gpio, GPIO_OUT);
-  // Initial state
   gpio_put(tdi_gpio, 0);
   gpio_put(tck_gpio, 0);
   gpio_put(tms_gpio, 1);
+
+  // Set up our UART with the required speed.
+  uart_init(UART_ID, BAUD_RATE);
+  gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
+  gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
+  uart_set_fifo_enabled(UART_ID, true);
+
+  // pmod config
+  gpio_init(PCK_PIN);
+  gpio_init(PWRITE_PIN);
+  gpio_init(PWD0_PIN);
+  gpio_init(PWD1_PIN);
+  gpio_init(PRD0_PIN);
+  gpio_init(PRD1_PIN);
+  gpio_init(PWAIT_PIN);
+  gpio_set_dir(PCK_PIN,    GPIO_OUT);
+  gpio_set_dir(PWRITE_PIN, GPIO_OUT);
+  gpio_set_dir(PWD0_PIN,   GPIO_OUT);
+  gpio_set_dir(PWD1_PIN,   GPIO_OUT);
+  gpio_set_dir(PRD0_PIN,   GPIO_IN);
+  gpio_set_dir(PRD1_PIN,   GPIO_IN);
+  gpio_set_dir(PWAIT_PIN,  GPIO_IN);
+  gpio_put(PCK_PIN,    0);
+  gpio_put(PWRITE_PIN, 0);
+  gpio_put(PWD0_PIN,   0);
+  gpio_put(PWD1_PIN,   0);
 
   // LED config
   gpio_init(LED_PIN);
   gpio_set_dir(LED_PIN, GPIO_OUT);
 
+  multicore_launch_core1(core1_entry);
   while (1) {
-    jtag_main_task();
+    from_host_task();
     fetch_command();
+    pmod_task();
   }
 }

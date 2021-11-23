@@ -28,18 +28,18 @@
 #define BUFFER_SIZE         2048
 
 #include <libusb.h>
-#define DIRTYJTAG_VID       0x1209
-#define DIRTYJTAG_PID       0xC0CA
-#define DIRTYJTAG_INTF      3
-#define DIRTYJTAG_READ_EP   0x86
-#define DIRTYJTAG_WRITE_EP  0x05
+#define XVCPICO_VID       0x2E8A
+#define XVCPICO_PID       0x000A
+#define XVCPICO_INTF      3
+#define XVCPICO_READ_EP   0x86
+#define XVCPICO_WRITE_EP  0x05
 libusb_context *usb_ctx;
 libusb_device_handle *dev_handle;
 
 static char xvcInfo[64];
 
 // Note: Modified!
-enum dirtyJtagCmd {
+enum xvcPicoCmd {
   CMD_STOP =  0x00,
   CMD_XFER =  0x03,
   CMD_WRITE = 0x04,
@@ -86,7 +86,7 @@ void gpio_send(_Bool header, uint32_t len, uint32_t n, uint8_t *tms, uint8_t *td
   }
   
   actual_length = 0;
-  ret = libusb_bulk_transfer(dev_handle, DIRTYJTAG_WRITE_EP, tx_buffer, header_offset, &actual_length, 1000);
+  ret = libusb_bulk_transfer(dev_handle, XVCPICO_WRITE_EP, tx_buffer, header_offset, &actual_length, 1000);
   if ((ret < 0) || (actual_length != header_offset)) {
     printf("gpio_xfer_full: usb bulk write failed!\n");
     return;
@@ -103,7 +103,7 @@ void gpio_recieve(uint32_t n, uint8_t *tdo)
   do {
     // Note: For a full-speed device, a bulk packet is limited to 64 bytes!
     // DirtyJTAG USB -> [32597.543687] usb 3-2.3.1: new full-speed USB device number 81 using xhci_hcd
-    ret = libusb_bulk_transfer(dev_handle, DIRTYJTAG_READ_EP, result, bytes, &actual_length, 2000);
+    ret = libusb_bulk_transfer(dev_handle, XVCPICO_READ_EP, result, bytes, &actual_length, 2000);
     if (ret < 0) {
       printf("gpio_xfer_full: usb bulk read failed!\n");
       printf("[Total Bytes] %d, [Return Code] %d [Actual Length] %d\n", bytes, ret, actual_length);
@@ -125,15 +125,15 @@ int device_init()
     printf("[ERROR] libusb init failed!\n");
     return -1;
   }
-  dev_handle = libusb_open_device_with_vid_pid(usb_ctx, DIRTYJTAG_VID, DIRTYJTAG_PID);
+  dev_handle = libusb_open_device_with_vid_pid(usb_ctx, XVCPICO_VID, XVCPICO_PID);
   if (!dev_handle) {
     printf("[ERROR] failed to open usb device!\n");
     libusb_exit(usb_ctx);
     return -1;
   }
-  ret = libusb_claim_interface(dev_handle, DIRTYJTAG_INTF);
+  ret = libusb_claim_interface(dev_handle, XVCPICO_INTF);
   if (ret) {
-    printf("[!] libusb error while claiming DirtyJTAG interface\n");
+    printf("[!] libusb error while claiming XvcPico interface\n");
     libusb_close(dev_handle);
     libusb_exit(usb_ctx);
     return -1;
@@ -165,7 +165,7 @@ int gpio_write(int tck, int tms, int tdi)
   buf[buffer_idx++] = tms & 1;
   buf[buffer_idx++] = tdi & 1;
   buf[buffer_idx++] = CMD_STOP;
-  int ret = libusb_bulk_transfer(dev_handle, DIRTYJTAG_WRITE_EP, buf, buffer_idx, &actual_length, 1000);
+  int ret = libusb_bulk_transfer(dev_handle, XVCPICO_WRITE_EP, buf, buffer_idx, &actual_length, 1000);
   if (ret < 0) {
     printf("gpio_write: usb bulk write failed\n");
     return -EXIT_FAILURE;

@@ -25,6 +25,7 @@ add_executable(xvcPico
 		xvcPico.c
 		usb_descriptors.c
 		jtag.c
+		axm.c
 )
 
 target_include_directories(xvcPico PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
