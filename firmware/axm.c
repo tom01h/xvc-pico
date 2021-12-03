@@ -38,7 +38,7 @@ void __time_critical_func(pread)(uint8_t *buffer, int size)
       j++;
       ci = gpio_get_all();
       if(!(ci & (1 << PWAIT_PIN))){
-        c |= (ci >> (PRD1_PIN - 7)) & 0xc0;
+        c |= (ci << (7 - PRD1_PIN)) & 0xc0;
       } else {
         c <<= 2;
         j--;

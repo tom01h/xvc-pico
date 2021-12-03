@@ -1,10 +1,11 @@
-#define PCK_PIN 6
-#define PWRITE_PIN 7
-#define PWD0_PIN 8
-#define PWD1_PIN 9
-#define PRD0_PIN 10
-#define PRD1_PIN 11
-#define PWAIT_PIN 4
+#define PWD0_PIN 2
+#define PWD1_PIN 3
+#define PRD0_PIN 4
+#define PRD1_PIN 5
+
+#define PCK_PIN 10
+#define PWRITE_PIN 11
+#define PWAIT_PIN 12
 
 #define AXM_ITF     0
 
