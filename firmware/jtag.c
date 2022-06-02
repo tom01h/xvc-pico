@@ -68,8 +68,8 @@ static int __time_critical_func(cmd_xfer)(int bitsLeft, const uint8_t *commands,
   if(bitsLeft == 0){
     com_offset = 5;
     bitsLeft = (commands[4] << 24) | (commands[3] << 16) | (commands[2] << 8) | (commands[1] << 0);
-    if(bitsLeft >= 16*8){
-      n = 16*8;
+    if(bitsLeft >= 28*8){
+      n = 28*8;
     } else {
       n = bitsLeft;
     }

@@ -66,10 +66,10 @@ enum xvcPicoCmd {
 
 void gpio_send(_Bool header, uint32_t len, uint32_t n, uint8_t *tms, uint8_t *tdi)
 {
-  unsigned char tx_buffer[64];
+  unsigned char tx_buffer[512];
   int actual_length, ret, header_offset = 0;
 
-  int bytes = (n + 7) / 8; // 16 or 32
+  int bytes = (n + 7) / 8;
 
   if(header){
     // Replace these with memcpy
@@ -95,10 +95,10 @@ void gpio_send(_Bool header, uint32_t len, uint32_t n, uint8_t *tms, uint8_t *td
 
 void gpio_recieve(uint32_t n, uint8_t *tdo)
 {
-  unsigned char result[64];
+  unsigned char result[256];
   int actual_length, ret;
 
-  int bytes = (n + 7) / 8; // 16 or 32
+  int bytes = (n + 7) / 8;
 
   do {
     // Note: For a full-speed device, a bulk packet is limited to 64 bytes!
@@ -139,7 +139,14 @@ int device_init()
     return -1;
   }
 
-  return 0; // success
+  libusb_device * dev;
+  dev = libusb_get_device (dev_handle);
+  int size;
+  size = libusb_get_max_iso_packet_size (dev, XVCPICO_WRITE_EP);
+
+  printf("write ep size = %d\n", size);
+
+  return size; // success
 }
 
 void device_close()
@@ -188,7 +195,7 @@ static int sread(int fd, void *target, int len) {
   return 1;
 }
 
-int handle_data(int fd) {
+int handle_data(int fd, int ep_size) {
   uint32_t len, nr_bytes;
 
   do {
@@ -279,7 +286,7 @@ int handle_data(int fd) {
     int bitsLeft = len;
     int byteIndex = 0;
     int byteIndexr = 0;
-    uint8_t tdi[32], tms[32], tdo[32];
+    uint8_t tdi[256], tms[256], tdo[256];
     _Bool header;
     int size;
     int sizer =0;
@@ -291,9 +298,9 @@ int handle_data(int fd) {
       tdi[0] = 0;
       tdo[0] = 0;
       if (header){
-        size = 16;
+        size = ep_size/2 - 4;
       } else {
-        size = 32;
+        size = ep_size/2;
       }
       if (bytesLeft >= size) {
         memcpy(tms, &buffer[byteIndex], size);
@@ -347,7 +354,8 @@ int main() {
 
   // Init
   sprintf(xvcInfo, "xvcServer_v1.0:%d\n", BUFFER_SIZE);
-  if (device_init() != 0) {
+  int ep_size = device_init();
+  if (ep_size < 0) {
     return -1;
   }
 
@@ -413,7 +421,7 @@ int main() {
             }
             FD_SET(newfd, &conn);
           }
-        } else if (handle_data(fd)) {
+        } else if (handle_data(fd, ep_size)) {
           if (verbose)
             printf("connection closed - fd %d\n", fd);
           close(fd);
