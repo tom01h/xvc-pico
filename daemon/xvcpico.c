@@ -25,7 +25,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#define BUFFER_SIZE         2048
+#define BUFFER_SIZE       1024*1024
 
 #include <libusb.h>
 #define XVCPICO_VID       0x2E8A
